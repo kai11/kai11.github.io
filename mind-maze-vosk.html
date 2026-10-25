@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Mind Maze</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;600;700&subset=cyrillic&display=swap" rel="stylesheet">
+<style>
+:root{--bg:#e8edf0;--card:#f7f9fa;--ink:#12303a;--mute:#5d737b;--line:#c5d1d6;--acc:#0f5c6e;--accInk:#fff;--hot:#c27a00;--ok:#2b7a4b;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#0e1a1f;--card:#16262d;--ink:#e2eef2;--mute:#8aa4ad;--line:#2a4049;--acc:#5cc3d8;--accInk:#08222a;--hot:#f0b24a;--ok:#6fd49a}}
+:root[data-theme="dark"]{--bg:#0e1a1f;--card:#16262d;--ink:#e2eef2;--mute:#8aa4ad;--line:#2a4049;--acc:#5cc3d8;--accInk:#08222a;--hot:#f0b24a;--ok:#6fd49a}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%}
+body{background:var(--bg);color:var(--ink);font-family:'Sora',system-ui,-apple-system,'Segoe UI',sans-serif;line-height:1.5}
+main{max-width:640px;margin:0 auto;padding:20px 16px 40px}
+h1{font-size:1.6rem;margin:0 0 4px;letter-spacing:-.02em}
+.sub{color:var(--mute);margin:0 0 18px;font-size:.92rem}
+.tabs{display:flex;gap:8px;margin-bottom:16px}
+.tabs button{flex:1;padding:10px 0;border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:10px;font:inherit;font-weight:600;cursor:pointer}
+.tabs button[aria-pressed="true"]{background:var(--acc);color:var(--accInk);border-color:var(--acc)}
+.say{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:18px;min-height:132px;font-size:1.12rem}
+.say.win{border-color:var(--ok)}
+.pairs{display:grid;gap:10px;margin:16px 0}
+.pair{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rose{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;max-width:420px;margin:0 auto;width:100%}
+.rose .hub{align-self:center;justify-self:center;width:14px;height:14px;border-radius:50%;border:2px solid var(--line)}
+.pairs .pair{max-width:420px;margin:0 auto;width:100%}
+.size{display:flex;align-items:center;gap:10px;margin-bottom:14px;color:var(--mute);font-size:.9rem}
+.size button{width:36px;height:36px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+.size button:disabled{opacity:.3;cursor:not-allowed}
+.size b{color:var(--ink)}
+.hist{margin:12px 0 0;padding:0 0 0 22px;color:var(--mute);font-size:.88rem}
+.hist li:last-child{color:var(--ink)}
+.dir{padding:14px 8px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;font-weight:600;cursor:pointer}
+.dir:not(:disabled):hover{border-color:var(--acc)}
+.dir:disabled{opacity:.3;cursor:not-allowed}
+button:focus-visible{outline:3px solid var(--hot);outline-offset:2px}
+.act{display:flex;flex-wrap:wrap;gap:8px}
+.act button{padding:10px 14px;border-radius:10px;border:1px solid var(--line);background:var(--card);color:var(--ink);font:inherit;cursor:pointer}
+.act button.on{background:var(--hot);color:#111;border-color:var(--hot)}
+.help[hidden]{display:none}
+.help{margin-top:14px;padding:14px 16px;border:1px solid var(--line);border-radius:12px;background:var(--card);font-size:.88rem}
+.help ol{margin:8px 0 0;padding-left:20px}
+.help li{margin-bottom:6px}
+.stat{margin-top:16px;color:var(--mute);font-size:.88rem;display:flex;flex-wrap:wrap;gap:6px 18px}
+.stat span{white-space:nowrap}
+@media (prefers-reduced-motion:no-preference){.dir{transition:border-color .15s}}
+</style>
+<script src="https://cdn.jsdelivr.net/npm/vosk-browser@0.0.5/dist/vosk.js"></script>
+</head>
+<body>
+<main>
+<h1 id="title">Mind Maze</h1>
+<p class="sub" id="sub"></p>
+<div class="tabs" id="tabs" role="group" aria-label="Dimensions"></div>
+<div class="size" id="size"></div>
+<div class="say" id="say" aria-live="polite"></div>
+<ol class="hist" id="hist"></ol>
+<div class="pairs" id="pairs"></div>
+<div class="act">
+<button id="mic"></button>
+<button id="spk" class="on"></button>
+<button id="hint"></button>
+<button id="rep"></button>
+<button id="his"></button>
+<button id="new"></button>
+<button id="lang"></button>
+<button id="help"></button>
+</div>
+<div class="help" id="helpbox" hidden></div>
+<p class="sub" id="cmds" style="margin:14px 0 0;font-size:.85rem;line-height:1.7"></p>
+<div class="stat" id="stat"></div>
+<p class="sub" id="warn" style="margin-top:12px;color:var(--hot)"></p>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const AXN={
+ en:[['up','down'],['right','left'],['forward','back'],['ana','kata'],['in','out']],
+ ru:[['вверх','вниз'],['вправо','влево'],['вперёд','назад'],['ана','ката'],['внутрь','наружу']]
+};
+const TX={
+ en:{title:'Mind Maze',sub:'Find the exit. Move by button, keyboard or voice. Add dimensions as you improve.',
+  micOff:'Voice input: off',micOn:'Voice input: listening',micNo:'Voice input: not supported here',
+  spkOn:'Voice narration: on',spkOff:'Voice narration: off',hint:'Hint (+3 moves)',rep:'Repeat',his:'History',nw:'New maze',lang:'Language: English',
+  size:'Size',per:n=>'per side, '+n+' rooms',moves:'Moves',dims:'Dimensions',pos:'Position',exit:'Exit',
+  help:'Help',helpT2:'Narration silent or wrong language?',helpL2:['Android: Settings, System (or General management), Languages and input, Text-to-speech output. Names vary by phone, so search Settings for text-to-speech.','Choose Speech Recognition and Synthesis from Google as the engine (earlier called Speech Services by Google). If missing, install it from Google Play.','Tap the gear next to it, Install voice data, pick the language (English or Russian), download.','Return to the page and reload. Narration picks a voice matching the Language button.','iPhone: Settings, Accessibility, Spoken Content, Voices, pick the language, download a voice.','Windows: Settings, Time and language, Speech, Add voices. Mac: System Settings, Accessibility, Spoken Content, System voice, Manage voices.','Still silent? Raise media volume. On iPhone check the silent switch.'],helpT:'Voice input not working?',micErr:'Voice input failed. Tap Help for fixes.',helpL:['Voice input runs inside the page (Vosk), no Google service. First use downloads a speech model, about 40 MB. Wait for the Listening message.','Allow the microphone when asked. Blocked already? Tap the lock icon in the address bar, Permissions, Microphone, Allow.','Open the page over https, localhost, or as a hosted file. The claude.ai preview blocks the microphone.','The Language button picks the model. Say commands in that language.','Say one command, then pause. Heard words are matched against a command list with synonyms, and one-letter slips are forgiven.','Bluetooth headset: the mic may switch to the headset. Try the phone mic.','Close other apps using the mic. Then turn Voice input off and on, or reload the page.'],vload:'Loading voice model (about 40 MB), first time only...',vlisten:'Listening. Say a command.',verr:'Voice input error: ',say:'Say: ',cmdw:'hint, repeat, history',keys:'Keys: ',and:' and ',can:l=>'You can go '+l+'.',dead:'Dead end.',winmove:(d,n)=>'You moved '+d+' and found the exit. It took you '+n+(n===1?' move.':' moves.'),won:()=>'Press new maze to go again.',
+  wall:d=>'Wall: '+d+'.',move:d=>'You moved '+d+'.',try:d=>'Try '+d+'.',
+  newm:n=>'New '+n+'D maze. Reach the exit in the corner.',axes:' Axes: ',
+  noVoices:'No speech voices found. Open this page in Chrome, not inside an app.',noLang:'No English voice installed. Tap Help.',err:'Narration error: '},
+ ru:{title:'Лабиринт измерений',sub:'Найди выход. Двигайся кнопками, клавишами или голосом. Добавляй измерения по мере роста мастерства.',
+  micOff:'Голосовой ввод: выкл',micOn:'Голосовой ввод: слушаю',micNo:'Голосовой ввод: не поддерживается',
+  spkOn:'Озвучка: вкл',spkOff:'Озвучка: выкл',hint:'Подсказка (+3 хода)',rep:'Повтор',his:'История',nw:'Новый лабиринт',lang:'Язык: Русский',
+  size:'Размер',per:n=>'на сторону, комнат: '+n,moves:'Ходы',dims:'Измерения',pos:'Позиция',exit:'Выход',
+  help:'Помощь',helpT2:'Озвучка молчит или не тот язык?',helpL2:['Android: Настройки, Система (или Общие настройки), Язык и ввод, Синтез речи. Названия зависят от телефона, ищи «синтез речи» в настройках.','Выбери движок «Распознавание и синтез речи от Google» (раньше «Speech Services by Google»). Если его нет, установи из Google Play.','Нажми шестерёнку рядом, Установить голосовые данные, выбери язык (русский или английский), скачай.','Вернись на страницу и перезагрузи её. Озвучка берёт голос под язык на кнопке языка.','iPhone: Настройки, Универсальный доступ, Устный контент, Голоса, выбери язык, скачай голос.','Windows: Параметры, Время и язык, Голос, Добавить голоса. Mac: Системные настройки, Универсальный доступ, Устный контент, Системный голос, Управление голосами.','Всё равно тишина? Увеличь громкость мультимедиа, на iPhone проверь переключатель беззвучного режима.'],helpT:'Голосовой ввод не работает?',micErr:'Голосовой ввод не работает. Нажми «Помощь».',helpL:['Голосовой ввод работает прямо на странице (Vosk), без сервиса Google. При первом запуске скачивается модель речи, около 40 МБ. Дождись сообщения «Слушаю».','Разреши микрофон, когда браузер спросит. Уже запретил? Нажми на замок в адресной строке, Разрешения, Микрофон, Разрешить.','Открой страницу по https, через localhost или как размещённый файл. В превью claude.ai микрофон заблокирован.','Кнопка языка выбирает модель. Говори команды на этом языке.','Говори одну команду и делай паузу. Услышанное сверяется со списком команд и синонимов, ошибка в одну букву прощается.','Bluetooth-гарнитура: микрофон может переключиться на гарнитуру. Попробуй микрофон телефона.','Закрой другие приложения, которые используют микрофон. Затем выключи и включи голосовой ввод или перезагрузи страницу.'],vload:'Загрузка голосовой модели (около 40 МБ), только в первый раз...',vlisten:'Слушаю. Скажи команду.',verr:'Ошибка голосового ввода: ',say:'Скажи: ',cmdw:'подсказка, повтор или повторить, история',keys:'Клавиши: ',and:' и ',can:l=>'Можно идти: '+l+'.',dead:'Тупик.',winmove:(d,n)=>{const o=n%10===1&&n%100!==11;return 'Ты прошёл '+d+' и нашёл выход. '+(o?'Тебе понадобился ':'Тебе понадобилось ')+n+' '+(o?'ход':(n%10>=2&&n%10<=4&&(n%100<10||n%100>=20)?'хода':'ходов'))+'.'},won:()=>'Нажми «Новый лабиринт», чтобы сыграть снова.',
+  wall:d=>'Стена: '+d+'.',move:d=>'Ты прошёл '+d+'.',try:d=>'Попробуй: '+d+'.',
+  newm:n=>'Новый '+['','','двумерный','трёхмерный','четырёхмерный','пятимерный'][n]+' лабиринт. Дойди до выхода в углу.',axes:' Оси: ',
+  noVoices:'Голоса речи не найдены. Открой страницу в Chrome, а не внутри приложения.',noLang:'Русский голос не установлен. Нажми «Помощь».',err:'Ошибка озвучки: '}
+};
+const MODEL={en:'https://ccoreilly.github.io/vosk-browser/models/vosk-model-small-en-us-0.15.tar.gz',ru:'https://ccoreilly.github.io/vosk-browser/models/vosk-model-small-ru-0.22.tar.gz'};
+const KD=['up','down','right','left','forward','back','ana','kata','in','out'];
+const SYN={
+ en:{up:['up','upward','north'],down:['down','downward','south'],right:['right','east','write'],left:['left','west','lift'],forward:['forward','ahead','front','go forward'],back:['back','backward','backwards','behind'],ana:['ana','anna','anah'],kata:['kata','cata','cotta'],in:['in','inside','enter','into'],out:['out','outside','exit'],hint:['hint','clue'],repeat:['repeat','again','say again'],history:['history','log']},
+ ru:{up:['вверх','наверх','выше'],down:['вниз','ниже'],right:['вправо','направо','право'],left:['влево','налево','лево'],forward:['вперед','прямо'],back:['назад'],ana:['ана','анна'],kata:['ката'],in:['внутрь','внутри','войти'],out:['наружу','снаружи','выйти'],hint:['подсказка','подсказку','подскажи'],repeat:['повтор','повтори','повторить','повторение','еще раз'],history:['история','историю']}
+};
+const SIZE={2:6,3:4,4:3,5:3};
+const LIM={2:[3,12],3:[2,7],4:[2,5],5:[2,4]};
+const KEYS=[['w','s'],['d','a'],['e','q'],['r','f'],['t','g']];
+let L=(navigator.language||'').toLowerCase().startsWith('ru')?'ru':'en';
+try{L=localStorage.getItem('mmL')||L}catch(e){}
+const tx=k=>TX[L][k];
+const loc=()=>L==='ru'?'ru-RU':'en-US';
+const nz=s=>s.replace(/ё/g,'е');
+let D=2,S,N,open,pos,exit,moves,done,speak=true,speaking=false,rec=null,micOn=false,hist=[];
+const SR=!!(window.Vosk&&window.WebAssembly&&navigator.mediaDevices);
+
+function warn(t){$('warn').textContent=t}
+function coords(i){const c=[];for(let a=0;a<D;a++){c.push(i%S);i=Math.floor(i/S)}return c}
+function idx(c){let i=0;for(let a=D-1;a>=0;a--)i=i*S+c[a];return i}
+function nb(i,a,sg){const c=coords(i);c[a]+=sg;return(c[a]<0||c[a]>=S)?-1:idx(c)}
+
+function build(){
+  S=SIZE[D];N=Math.pow(S,D);open=Array.from({length:N},()=>new Set());
+  const seen=new Uint8Array(N),st=[0];seen[0]=1;
+  while(st.length){
+    const cur=st[st.length-1],opts=[];
+    for(let a=0;a<D;a++)for(const sg of[1,-1]){const n=nb(cur,a,sg);if(n>=0&&!seen[n])opts.push([a,sg,n])}
+    if(!opts.length){st.pop();continue}
+    const[a,sg,n]=opts[Math.floor(Math.random()*opts.length)];
+    open[cur].add(a*2+(sg>0?0:1));open[n].add(a*2+(sg>0?1:0));
+    seen[n]=1;st.push(n);
+  }
+  pos=0;exit=N-1;moves=0;done=false;
+}
+
+function dirs(i){return[...open[i]].sort((x,y)=>x-y)}
+function name(d){return AXN[L][d>>1][d&1]}
+function list(a){return a.length>1?a.slice(0,-1).join(', ')+tx('and')+a[a.length-1]:a[0]}
+
+function descFor(ds,dn,mv){
+  if(dn)return tx('won')(mv);
+  const n=ds.map(name);
+  return tx('can')(list(n))+(n.length===1?' '+tx('dead'):'');
+}
+function describe(){return descFor(dirs(pos),done,moves)}
+function entText(e){return(e.m?e.m()+' ':'')+descFor(e.ds,e.done,e.moves)}
+
+function dist(){
+  const d=new Int32Array(N).fill(-1),q=[exit];d[exit]=0;
+  while(q.length){const c=q.shift();for(const k of open[c]){const n=nb(c,k>>1,(k&1)?-1:1);if(n>=0&&d[n]<0){d[n]=d[c]+1;q.push(n)}}}
+  return d;
+}
+
+function say(html,plain){
+  const el=$('say');
+  el.innerHTML=html;el.classList.toggle('win',done);
+  if(speak&&'speechSynthesis'in window){
+    speechSynthesis.cancel();
+    const u=new SpeechSynthesisUtterance(plain||el.textContent);
+    u.lang=loc();u.volume=1;
+    const vs=speechSynthesis.getVoices();
+    if(!vs.length)warn(tx('noVoices'));
+    else{const v=vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith(L));if(v){u.voice=v;warn('')}else warn(tx('noLang'))}
+    u.onstart=()=>{speaking=true};
+    u.onend=()=>{setTimeout(()=>{speaking=false},400)};
+    u.onerror=e=>{speaking=false;warn(tx('err')+e.error)};
+    window._u=u;
+    setTimeout(()=>{speechSynthesis.resume();speechSynthesis.speak(u)},80);
+  }
+}
+
+function render(m){
+  hist.push({m:m,ds:dirs(pos),done:done,moves:moves});if(hist.length>5)hist.shift();
+  refresh();
+}
+function refresh(){
+  const ds=dirs(pos);
+  const B=d=>'<button class="dir" data-d="'+d+'"'+((!ds.includes(d)||done)?' disabled':'')+'>'+name(d)+'</button>';
+  $('pairs').innerHTML='<div class="rose"><span></span>'+B(0)+'<span></span>'+B(3)+'<span class="hub"></span>'+B(2)+'<span></span>'+B(1)+'<span></span></div>'+AXN[L].slice(2,D).map((p,i)=>'<div class="pair">'+B(i*2+4)+B(i*2+5)+'</div>').join('');
+  document.querySelectorAll('.dir').forEach(b=>b.onclick=()=>go(+b.dataset.d));
+  $('stat').innerHTML='<span>'+tx('moves')+': '+moves+'</span><span>'+tx('dims')+': '+D+'</span><span>'+tx('pos')+': '+coords(pos).join(', ')+'</span><span>'+tx('exit')+': '+coords(exit).join(', ')+'</span>';
+  $('hist').innerHTML=hist.map(e=>'<li>'+entText(e)+'</li>').join('');
+  const e=hist[hist.length-1],d=descFor(e.ds,e.done,e.moves);
+  say((e.m?e.m()+' ':'')+(e.done?'<b>'+d+'</b>':d),entText(e));
+}
+
+function go(d){
+  if(done)return;
+  if(!open[pos].has(d)){render(()=>tx('wall')(name(d)));return}
+  pos=nb(pos,d>>1,(d&1)?-1:1);moves++;
+  if(pos===exit)done=true;
+  const w=pos===exit,mv=moves;render(w?()=>tx('winmove')(name(d),mv):()=>tx('move')(name(d)));
+}
+
+function hint(){
+  if(done)return;
+  const d=dist();let best=-1,bd=1e9;
+  for(const k of open[pos]){const n=nb(pos,k>>1,(k&1)?-1:1);if(d[n]<bd){bd=d[n];best=k}}
+  moves+=3;const b=best;render(()=>tx('try')(name(b)));
+}
+
+function renderSize(){
+  const l=LIM[D];
+  $('size').innerHTML='<span>'+tx('size')+'</span><button id="sm" aria-label="-"'+(SIZE[D]<=l[0]?' disabled':'')+'>\u2212</button><b>'+SIZE[D]+'</b><button id="sp" aria-label="+"'+(SIZE[D]>=l[1]?' disabled':'')+'>+</button><span>'+tx('per')(Math.pow(SIZE[D],D))+'</span>';
+  $('sm').onclick=()=>{SIZE[D]--;setDim(D)};
+  $('sp').onclick=()=>{SIZE[D]++;setDim(D)};
+}
+
+function setDim(n){
+  D=n;build();hist=[];persist();
+  $('tabs').innerHTML=[2,3,4,5].map(k=>'<button aria-pressed="'+(k===D)+'" data-n="'+k+'">'+k+'D</button>').join('');
+  document.querySelectorAll('#tabs button').forEach(b=>b.onclick=()=>setDim(+b.dataset.n));
+  renderSize();
+  showCmds();
+  const nd=D;render(()=>tx('newm')(nd)+(nd>2?tx('axes')+AXN[L].slice(0,nd).map(p=>p[0]+'/'+p[1]).join(', ')+'.':''));
+}
+
+function applyLang(){
+  document.documentElement.lang=L;
+  document.title=tx('title');
+  $('title').textContent=tx('title');$('sub').textContent=tx('sub');
+  $('hint').textContent=tx('hint');$('rep').textContent=tx('rep');$('his').textContent=tx('his');
+  $('new').textContent=tx('nw');$('lang').textContent=tx('lang');$('help').textContent=tx('help');fillHelp();
+  $('spk').classList.toggle('on',speak);$('spk').textContent=speak?tx('spkOn'):tx('spkOff');
+  showCmds();
+  $('mic').textContent=!SR?tx('micNo'):micOn?tx('micOn'):tx('micOff');
+}
+
+function readHist(){const s=speak;speak=true;say($('say').innerHTML,hist.map(entText).join(' '));speak=s}
+function showCmds(){
+  const nm=[],ky=[];
+  for(let a=0;a<D;a++)for(let s=0;s<2;s++){nm.push(AXN[L][a][s]);ky.push(KEYS[a][s].toUpperCase()+' '+AXN[L][a][s])}
+  $('cmds').innerHTML=tx('say')+nm.join(', ')+', '+tx('cmdw')+'<br>'+tx('keys')+ky.join(', ');
+}
+
+$('new').onclick=()=>setDim(D);
+$('hint').onclick=hint;
+$('his').onclick=readHist;
+function fillHelp(){$('helpbox').innerHTML='<b>'+tx('helpT')+'</b><ol>'+tx('helpL').map(s=>'<li>'+s+'</li>').join('')+'</ol><b style="display:block;margin-top:12px">'+tx('helpT2')+'</b><ol>'+tx('helpL2').map(s=>'<li>'+s+'</li>').join('')+'</ol>'}
+$('help').onclick=()=>{const b=$('helpbox');b.hidden=!b.hidden};
+function repeatLast(){const e=hist[hist.length-1];if(e)say(entText(e),entText(e))}
+$('rep').onclick=repeatLast;
+$('spk').onclick=function(){
+  speak=!speak;
+  if(!speak&&'speechSynthesis'in window)speechSynthesis.cancel();
+  this.classList.toggle('on',speak);applyLang();persist();
+  if(speak)say(describe(),describe());
+};
+$('lang').onclick=()=>{
+  L=L==='en'?'ru':'en';
+  try{localStorage.setItem('mmL',L)}catch(e){}
+  if(micOn)startVosk();
+  applyLang();renderSize();refresh();
+};
+
+document.addEventListener('keydown',e=>{
+  if(e.target.tagName==='BUTTON'&&(e.key===' '||e.key==='Enter'))return;
+  const k=e.key.toLowerCase();
+  for(let a=0;a<D;a++)for(let s=0;s<2;s++)if(KEYS[a][s]===k){go(a*2+s);return}
+});
+
+let vtok=0,vs=null;const models={};
+function lev(a,b){const m=a.length,n=b.length,d=[];for(let i=0;i<=m;i++)d[i]=[i];for(let j=1;j<=n;j++)d[0][j]=j;for(let i=1;i<=m;i++)for(let j=1;j<=n;j++)d[i][j]=Math.min(d[i-1][j]+1,d[i][j-1]+1,d[i-1][j-1]+(a[i-1]===b[j-1]?0:1));return d[m][n]}
+function parse(text){
+  const t=' '+nz(text.toLowerCase()).replace(/[^a-zа-я]+/g,' ').trim()+' ';
+  const act=[];
+  for(let d=0;d<D*2;d++)act.push([KD[d],()=>go(d)]);
+  act.push(['hint',hint],['repeat',repeatLast],['history',readHist]);
+  let best=null,bl=0;
+  for(const[k,f]of act)for(const p of SYN[L][k])if(t.includes(' '+p+' ')&&p.length>bl){best=f;bl=p.length}
+  if(best)return best;
+  for(const w of t.trim().split(' '))if(w.length>=4)for(const[k,f]of act)for(const p of SYN[L][k])if(p.length>=4&&p.indexOf(' ')<0&&lev(w,p)<=1)return f;
+  return null;
+}
+function stopVosk(){
+  if(!vs)return;
+  try{vs.node.disconnect();vs.src.disconnect();vs.stream.getTracks().forEach(t=>t.stop());vs.ctx.close();vs.recog.remove()}catch(e){}
+  vs=null;
+}
+async function startVosk(){
+  stopVosk();micOn=true;const tok=++vtok,myL=L;
+  $('mic').classList.add('on');applyLang();
+  try{
+    for(const k in models)if(k!==myL){try{models[k].terminate()}catch(e){}delete models[k]}
+    if(!models[myL]){warn(tx('vload'));models[myL]=await Vosk.createModel(MODEL[myL])}
+    if(tok!==vtok||!micOn)return;
+    const recog=new models[myL].KaldiRecognizer();
+    recog.on('result',m=>{
+      const t=(m.result&&m.result.text)||'';
+      if(!t||speaking)return;
+      warn('Heard: '+t);
+      const f=parse(t);if(f)f();
+    });
+    const stream=await navigator.mediaDevices.getUserMedia({video:false,audio:{echoCancellation:true,noiseSuppression:true,channelCount:1}});
+    if(tok!==vtok||!micOn){stream.getTracks().forEach(t=>t.stop());recog.remove();return}
+    const ctx=new AudioContext(),node=ctx.createScriptProcessor(4096,1,1),src=ctx.createMediaStreamSource(stream);
+    node.onaudioprocess=ev=>{if(speaking)return;try{recog.acceptWaveform(ev.inputBuffer)}catch(e){}};
+    src.connect(node);node.connect(ctx.destination);
+    vs={ctx,node,src,stream,recog};
+    warn(tx('vlisten'));
+  }catch(e){micOn=false;$('mic').classList.remove('on');applyLang();warn(tx('verr')+(e&&e.message||e))}
+}
+if(!SR)$('mic').disabled=true;
+else $('mic').onclick=()=>{
+  if(micOn){micOn=false;vtok++;stopVosk();$('mic').classList.remove('on');applyLang();warn('');return}
+  startVosk();
+};
+
+function persist(){try{localStorage.setItem('mmS',JSON.stringify({SIZE:SIZE,speak:speak,D:D}))}catch(e){}}
+let D0=2;
+try{
+  const s=JSON.parse(localStorage.getItem('mmS')||'{}');
+  if(s.SIZE)for(const k in s.SIZE){const v=s.SIZE[k];if(LIM[k]&&v>=LIM[k][0]&&v<=LIM[k][1])SIZE[k]=v}
+  if(typeof s.speak==='boolean')speak=s.speak;
+  if(LIM[s.D])D0=s.D;
+}catch(e){}
+applyLang();
+setDim(D0);
+</script>
+</body>
+</html>
